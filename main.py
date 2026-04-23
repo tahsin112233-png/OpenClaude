@@ -1,12 +1,10 @@
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse, HTMLResponse
-from fastapi.staticfiles import StaticFiles
 import httpx
 import json
 import os
 import re
-import asyncio
 from typing import List, Dict, Any
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
@@ -81,21 +79,21 @@ async def fetch_all_free_models():
     # Add NVIDIA NIM free models if API key exists
     if NVIDIA_NIM_API_KEY:
         nvidia_models = [
-            {"id": "nvidia/nemotron-4-340b-instruct", "name": "Nemotron 4 340B", "provider": "NVIDIA", "context_length": 4096, "pricing": "40 req/min free", "type": "nvidia"},
             {"id": "nvidia/llama-3.1-nemotron-70b-instruct", "name": "Llama 3.1 Nemotron 70B", "provider": "NVIDIA", "context_length": 8192, "pricing": "40 req/min free", "type": "nvidia"},
-            {"id": "nvidia/mistral-nemo-12b-instruct", "name": "Mistral NeMo 12B", "provider": "NVIDIA", "context_length": 8192, "pricing": "40 req/min free", "type": "nvidia"}
+            {"id": "nvidia/mistral-nemo-12b-instruct", "name": "Mistral NeMo 12B", "provider": "NVIDIA", "context_length": 8192, "pricing": "40 req/min free", "type": "nvidia"},
+            {"id": "nvidia/nemotron-4-340b-instruct", "name": "Nemotron 4 340B", "provider": "NVIDIA", "context_length": 4096, "pricing": "40 req/min free", "type": "nvidia"}
         ]
         all_models.extend(nvidia_models)
     
     # Add fallback free models if no API keys
     if not all_models:
         all_models = [
-            {"id": "openrouter/stepfun/step-3.5-flash:free", "name": "Step 3.5 Flash", "provider": "StepFun", "context_length": 8192, "pricing": "Free", "type": "openrouter"},
-            {"id": "openrouter/deepseek/deepseek-r1-0528:free", "name": "DeepSeek R1", "provider": "DeepSeek", "context_length": 128000, "pricing": "Free", "type": "openrouter"},
-            {"id": "openrouter/openai/gpt-oss-120b:free", "name": "GPT-OSS 120B", "provider": "OpenAI", "context_length": 8192, "pricing": "Free", "type": "openrouter"},
-            {"id": "openrouter/microsoft/phi-3-medium-128k:free", "name": "Phi-3 Medium", "provider": "Microsoft", "context_length": 128000, "pricing": "Free", "type": "openrouter"},
-            {"id": "openrouter/google/gemini-2-flash-thinking-exp:free", "name": "Gemini 2 Flash", "provider": "Google", "context_length": 1048576, "pricing": "Free", "type": "openrouter"},
-            {"id": "openrouter/meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "provider": "Meta", "context_length": 128000, "pricing": "Free", "type": "openrouter"}
+            {"id": "openrouter/stepfun/step-3.5-flash:free", "name": "Step 3.5 Flash", "provider": "StepFun", "context_length": 8192, "pricing": "Free", "type": "fallback"},
+            {"id": "openrouter/deepseek/deepseek-r1-0528:free", "name": "DeepSeek R1", "provider": "DeepSeek", "context_length": 128000, "pricing": "Free", "type": "fallback"},
+            {"id": "openrouter/openai/gpt-oss-120b:free", "name": "GPT-OSS 120B", "provider": "OpenAI", "context_length": 8192, "pricing": "Free", "type": "fallback"},
+            {"id": "openrouter/microsoft/phi-3-medium-128k:free", "name": "Phi-3 Medium", "provider": "Microsoft", "context_length": 128000, "pricing": "Free", "type": "fallback"},
+            {"id": "openrouter/google/gemini-2-flash-thinking-exp:free", "name": "Gemini 2 Flash", "provider": "Google", "context_length": 1048576, "pricing": "Free", "type": "fallback"},
+            {"id": "openrouter/meta-llama/llama-3.3-70b-instruct:free", "name": "Llama 3.3 70B", "provider": "Meta", "context_length": 128000, "pricing": "Free", "type": "fallback"}
         ]
     
     all_models_cache = all_models
@@ -109,7 +107,7 @@ HTML_TEMPLATE = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
-    <title>Free Claude Code - AI Assistant with GitHub Intelligence</title>
+    <title>Free Claude Code - AI Assistant</title>
     <style>
         * {
             margin: 0;
@@ -131,7 +129,6 @@ HTML_TEMPLATE = """
             height: 100vh;
         }
         
-        /* Header */
         .header {
             background: #1e1e1e;
             border-bottom: 1px solid #333;
@@ -199,7 +196,6 @@ HTML_TEMPLATE = """
             background: #3d3d3d;
         }
         
-        /* Main Content */
         .main-content {
             flex: 1;
             display: flex;
@@ -207,7 +203,6 @@ HTML_TEMPLATE = """
             overflow: hidden;
         }
         
-        /* Messages Area */
         .messages {
             flex: 1;
             overflow-y: auto;
@@ -247,13 +242,6 @@ HTML_TEMPLATE = """
             border: 1px solid #333;
         }
         
-        .message.system .message-content {
-            background: #1a3a1a;
-            border: 1px solid #4CAF50;
-            font-size: 12px;
-        }
-        
-        /* Code blocks */
         pre {
             background: #1e1e1e;
             padding: 12px;
@@ -275,7 +263,6 @@ HTML_TEMPLATE = """
             gap: 4px;
         }
         
-        /* Input Area */
         .input-area {
             border-top: 1px solid #333;
             padding: 16px;
@@ -331,7 +318,6 @@ HTML_TEMPLATE = """
             cursor: pointer;
         }
         
-        /* Loading indicator */
         .typing-indicator {
             display: inline-flex;
             gap: 4px;
@@ -354,7 +340,6 @@ HTML_TEMPLATE = """
             40% { transform: scale(1); }
         }
         
-        /* Mobile responsive */
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -372,7 +357,6 @@ HTML_TEMPLATE = """
             }
         }
         
-        /* Status */
         .status {
             font-size: 11px;
             color: #4CAF50;
@@ -386,7 +370,7 @@ HTML_TEMPLATE = """
         <div class="header">
             <div class="logo">
                 <h1>🤖 Free Claude Code</h1>
-                <span class="badge">Free • Open Source • GitHub Ready</span>
+                <span class="badge">Free • Open Source</span>
             </div>
             <div class="model-selector">
                 <label>🤯 Model:</label>
@@ -408,8 +392,7 @@ HTML_TEMPLATE = """
                         <strong>Try these examples:</strong><br>
                         • "Explain this repo: https://github.com/facebook/react"<br>
                         • "Write a Python function to sort a list"<br>
-                        • "What's the difference between React and Vue?"<br>
-                        • "Create a simple HTML/CSS button with hover effect"<br>
+                        • "Create a simple HTML/CSS button"<br>
                     </div>
                 </div>
             </div>
@@ -424,17 +407,14 @@ HTML_TEMPLATE = """
                     <button class="send-btn" onclick="sendMessage()">📤 Send Message</button>
                     <button class="clear-btn" onclick="clearChat()">🗑️ Clear</button>
                 </div>
-                <div class="status" id="status">✅ Ready • Using OpenRouter API</div>
+                <div class="status" id="status">✅ Ready</div>
             </div>
         </div>
     </div>
     
     <script>
         let currentMessages = [];
-        let currentAbortController = null;
-        let currentModel = null;
         
-        // Load models on startup
         async function loadModels() {
             try {
                 const response = await fetch('/api/models');
@@ -449,31 +429,12 @@ HTML_TEMPLATE = """
                     return;
                 }
                 
-                // Group by provider
-                const grouped = {};
-                models.forEach(model => {
-                    const provider = model.provider || model.type || 'Other';
-                    if (!grouped[provider]) grouped[provider] = [];
-                    grouped[provider].push(model);
-                });
-                
-                for (const [provider, providerModels] of Object.entries(grouped)) {
-                    const group = document.createElement('optgroup');
-                    group.label = provider;
-                    
-                    providerModels.forEach(model => {
-                        const option = document.createElement('option');
-                        option.value = model.id;
-                        let ctx = Math.round(model.context_length / 1000);
-                        option.textContent = `${model.name} (${ctx}k ctx) - ${model.pricing}`;
-                        group.appendChild(option);
-                    });
-                    
-                    select.appendChild(group);
-                }
-                
-                if (models.length > 0) {
-                    currentModel = models[0].id;
+                for (const model of models) {
+                    const option = document.createElement('option');
+                    option.value = model.id;
+                    let ctx = Math.round(model.context_length / 1000);
+                    option.textContent = `${model.name} (${ctx}k ctx) - ${model.pricing}`;
+                    select.appendChild(option);
                 }
                 
                 updateStatus(`✅ Loaded ${models.length} free models`);
@@ -493,7 +454,7 @@ HTML_TEMPLATE = """
             statusDiv.textContent = message;
             setTimeout(() => {
                 if (statusDiv.textContent === message) {
-                    statusDiv.textContent = '✅ Ready • Using OpenRouter API';
+                    statusDiv.textContent = '✅ Ready';
                 }
             }, 3000);
         }
@@ -503,20 +464,16 @@ HTML_TEMPLATE = """
             const message = input.value.trim();
             if (!message) return;
             
-            // Disable send button
             const sendBtn = document.querySelector('.send-btn');
             sendBtn.disabled = true;
             
-            // Add user message
             addMessage('user', message);
             currentMessages.push({ role: 'user', content: message });
             input.value = '';
             
-            // Get selected model
             const modelSelect = document.getElementById('modelSelect');
             const model = modelSelect.value;
             
-            // Add loading indicator
             const loadingId = addLoadingIndicator();
             
             try {
@@ -562,9 +519,7 @@ HTML_TEMPLATE = """
                                         updateMessage(messageElement, assistantMessage);
                                     }
                                 }
-                            } catch (e) {
-                                // Ignore parse errors
-                            }
+                            } catch (e) {}
                         }
                     }
                 }
@@ -576,7 +531,7 @@ HTML_TEMPLATE = """
             } catch (error) {
                 console.error('Error:', error);
                 removeLoadingIndicator(loadingId);
-                addMessage('assistant', `❌ Error: ${error.message}\\n\\nPlease make sure you've set your OpenRouter API key in Render environment variables.`);
+                addMessage('assistant', `❌ Error: ${error.message}\\n\\nMake sure you've set your OpenRouter API key in Render environment variables.`);
             } finally {
                 sendBtn.disabled = false;
                 input.focus();
@@ -630,20 +585,16 @@ HTML_TEMPLATE = """
         function renderMarkdown(content) {
             let html = content;
             
-            // Code blocks
             html = html.replace(/```(\\w+)?\\n([\\s\\S]*?)```/g, (match, lang, code) => {
                 return `<pre><code>${escapeHtml(code)}</code></pre>`;
             });
             
-            // Inline code
             html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
             
-            // GitHub links
             html = html.replace(/https?:\\/\\/github\\.com\\/[\\w\\-\\.]+\\/[\\w\\-\\.]+/g, (url) => {
                 return `<a href="${url}" target="_blank" class="github-link">📦 ${url}</a>`;
             });
             
-            // Line breaks
             html = html.replace(/\\n/g, '<br>');
             
             return html;
@@ -662,13 +613,12 @@ HTML_TEMPLATE = """
                 <div class="message assistant">
                     <div class="message-content">
                         <strong>🧹 Chat cleared!</strong><br><br>
-                        Ready for new questions. Paste a GitHub URL to get started!
+                        Ready for new questions!
                     </div>
                 </div>
             `;
         }
         
-        // Enter to send
         document.getElementById('userInput').addEventListener('keydown', (e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -676,10 +626,7 @@ HTML_TEMPLATE = """
             }
         });
         
-        // Load models on startup
         loadModels();
-        
-        // Auto-refresh models every hour
         setInterval(loadModels, 3600000);
     </script>
 </body>
@@ -702,20 +649,18 @@ async def chat(request: Request):
         messages = data.get("messages", [])
         model = data.get("model", "openrouter/stepfun/step-3.5-flash:free")
         
-        # Detect GitHub URLs in last message
+        # Detect GitHub URLs
         if messages:
             last_content = messages[-1].get("content", "")
             github_urls = re.findall(r'https?://github\.com/[\w\-\.]+/[\w\-\.]+', last_content)
             
             if github_urls:
-                # Add system message about GitHub
-                github_context = f"The user shared these GitHub repositories: {', '.join(github_urls)}. Provide detailed analysis of the repository structure, main technologies, and how to work with it."
+                github_context = f"The user shared these GitHub repositories: {', '.join(github_urls)}. Provide detailed analysis of the repository structure and main technologies."
                 messages.insert(0, {"role": "system", "content": github_context})
         
         async def generate():
             try:
-                # Use OpenRouter if API key exists
-                if OPENROUTER_API_KEY and "openrouter" in model:
+                if OPENROUTER_API_KEY:
                     async with httpx.AsyncClient(timeout=120.0) as client:
                         async with client.stream(
                             "POST",
@@ -740,38 +685,13 @@ async def chat(request: Request):
                                         yield "data: [DONE]\n\n"
                                     else:
                                         yield line + "\n\n"
-                elif NVIDIA_NIM_API_KEY and "nvidia" in model:
-                    # NVIDIA NIM endpoint
-                    actual_model = model.replace("nvidia/", "")
-                    async with httpx.AsyncClient(timeout=120.0) as client:
-                        async with client.stream(
-                            "POST",
-                            "https://integrate.api.nvidia.com/v1/chat/completions",
-                            headers={
-                                "Authorization": f"Bearer {NVIDIA_NIM_API_KEY}",
-                                "Content-Type": "application/json"
-                            },
-                            json={
-                                "model": actual_model,
-                                "messages": messages,
-                                "stream": True,
-                                "temperature": 0.7,
-                                "max_tokens": 4000
-                            }
-                        ) as response:
-                            async for line in response.aiter_lines():
-                                if line.startswith("data: "):
-                                    if line == "data: [DONE]":
-                                        yield "data: [DONE]\n\n"
-                                    else:
-                                        yield line + "\n\n"
                 else:
-                    # Fallback response
-                    yield f"data: {json.dumps({'content': '⚠️ No API key configured. Please set OPENROUTER_API_KEY in environment variables.\\n\\nGet your free key at: https://openrouter.ai/keys'})}\n\n"
+                    error_msg = "⚠️ No OpenRouter API key configured. Please set OPENROUTER_API_KEY in environment variables.\n\nGet your free key at: https://openrouter.ai/keys"
+                    yield f"data: {json.dumps({'content': error_msg})}\n\n"
                     yield "data: [DONE]\n\n"
                     
             except Exception as e:
-                error_msg = f"❌ API Error: {str(e)}\\n\\nPlease check your OpenRouter API key is valid."
+                error_msg = f"❌ API Error: {str(e)}"
                 yield f"data: {json.dumps({'content': error_msg})}\n\n"
                 yield "data: [DONE]\n\n"
         
